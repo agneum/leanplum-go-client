@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
+	"encoding/json"
 	"log"
 	"net/http"
 	"net/url"
@@ -21,6 +20,19 @@ type Config struct {
 	AppId      string `url:"appId"`
 	ClientKey  string `url:"clientKey"`
 	ApiVersion string `url:"apiVersion"`
+}
+
+type CommonResponse struct {
+	Response []Response `json:"response"`
+}
+
+type Response struct {
+	Success bool           `json:"success"`
+	Error   *ResponseError `json:"error,omitempty"`
+}
+
+type ResponseError struct {
+	Message string `json:"message"`
 }
 
 func main() {
@@ -42,18 +54,18 @@ func Get(config Config, arguments map[string]string) {
 
 	response, err := http.Get(url)
 
-	if err != nil {
-		log.Fatal(err)
-	}
-	body, err := ioutil.ReadAll(response.Body)
-	response.Body.Close()
+	resp := new(CommonResponse)
+	err = json.NewDecoder(response.Body).Decode(resp)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error: %v\n", err)
 	}
 
-	fmt.Printf("Success: %s", body)
+	if resp.Response != nil {
+		log.Fatalf("The error message: %v\n", resp.Response[0].Error.Message)
+	}
 
+	log.Printf("Success is %v\n", resp.Response[0].Success)
 }
 
 func ReadConfig() Config {
