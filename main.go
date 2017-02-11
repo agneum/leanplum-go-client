@@ -22,15 +22,15 @@ type Config struct {
 	ApiVersion string `url:"apiVersion"`
 }
 
-type CommonResponse struct {
-	Response []Response `json:"response"`
+type ICommonResponse interface {
+	ProcessResponse() error
 }
 
-type Response struct {
-	Success bool           `json:"success"`
-	Error   *ResponseError `json:"error,omitempty"`
-	Warning *ResponseError `json:"warning,omitempty"`
-	Result  *string        `json:"result,omitempty"`
+type ServerResponse struct {
+	Success bool           `json:"response[0].success"`
+	Error   *ResponseError `json:"response[0].error,omitempty"`
+	Warning *ResponseError `json:"response[0].warning,omitempty"`
+	Result  *string        `json:"response[0].result,omitempty"`
 	// MessagesSent *string        `json:"messagesSent,omitempty"`
 }
 
@@ -47,30 +47,30 @@ type MessageContent struct {
 	Values map[string]string `json:"values"`
 }
 
-func Get(config Config, arguments map[string]string) {
+func Get(config Config, arguments map[string]string) *ServerResponse {
 	uriParams, _ := query.Values(config)
-	queryString := url.Values{}
-	for k, v := range arguments {
-		queryString.Add(k, v)
-	}
+	queryString := makeQueryString(arguments)
+
 	url := Leanplum_api_url + "?" + uriParams.Encode() + queryString.Encode()
 
 	response, err := http.Get(url)
 
 	defer response.Body.Close()
 
-	resp := new(CommonResponse)
+	resp := new(ServerResponse)
 	err = json.NewDecoder(response.Body).Decode(resp)
 
 	if err != nil {
 		log.Fatalf("Error: %v\n", err)
 	}
 
-	if resp.Response != nil {
-		log.Fatalf("The error message: %v\n", resp.Response[0].Error.Message)
+	if resp.Error != nil {
+		log.Fatalf("The error message: %v\n", resp.Error.Message)
 	}
 
-	log.Printf("Success is %v\n", resp.Response[0].Success)
+	log.Printf("Success is %v\n", resp.Success)
+
+	return resp
 }
 
 func Post(config Config, body []byte, parameters map[string]string) {
@@ -80,36 +80,44 @@ func Post(config Config, body []byte, parameters map[string]string) {
 
 	response, err := http.Post(url, "application/json", bytes.NewBuffer(body))
 
-	if response != nil {
-		defer response.Body.Close()
-	}
-
 	if err != nil {
 		log.Fatalf("%v\n", err)
-		return
 	}
 
-	resp := new(CommonResponse)
-	err = json.NewDecoder(response.Body).Decode(resp)
+	resp := new(ServerResponse)
+	_ = resp.processResponse(response)
 
-	if err != nil {
-		log.Fatalf("Error: %v\n", err)
-		return
-	}
-
-	if !resp.Response[0].Success {
-		if resp.Response[0].Error != nil {
-			log.Fatalf("The error message: %v\n", resp.Response[0].Error.Message)
+	if !resp.Success {
+		if resp.Error != nil {
+			log.Fatalf("The error message: %v\n", resp.Error.Message)
 			return
 		}
 	}
 
-	if resp.Response[0].Warning != nil {
-		log.Fatalf("The warning message: %v\n", resp.Response[0].Warning.Message)
+	if resp.Warning != nil {
+		log.Fatalf("The warning message: %v\n", resp.Warning.Message)
 		return
 	}
 
-	log.Printf("Success is %v. Result is %v\n", resp.Response[0].Success, resp.Response[0].Result)
+	log.Printf("Success is %v. Result is %v\n", resp.Success, resp.Result)
+}
+
+func (responser *ServerResponse) processResponse(response *http.Response) error {
+	if response != nil {
+		defer response.Body.Close()
+	}
+	err := json.NewDecoder(response.Body).Decode(responser)
+
+	if err != nil {
+		log.Fatalf("Error: %v\n", err)
+	}
+
+	// TODO: processing errors and warnings
+	if responser.Error != nil {
+		log.Fatalf("The error message: %v\n", responser.Error.Message)
+	}
+
+	return err
 }
 
 // Read config from toml-file
