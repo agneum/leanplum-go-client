@@ -3,6 +3,7 @@ package leanplum
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -35,31 +36,22 @@ type CommonResponse struct {
 }
 
 type ServerResponse struct {
-	Success bool           `json:"success"`
-	Error   *ResponseError `json:"error,omitempty"`
-	Warning *ResponseError `json:"warning,omitempty"`
-	Result  *string        `json:"result,omitempty"`
-	// MessagesSent *string        `json:"messagesSent,omitempty"`
+	Success      bool           `json:"success"`
+	Error        *ResponseError `json:"error,omitempty"`
+	Warning      *ResponseError `json:"warning,omitempty"`
+	Result       *string        `json:"result,omitempty"`
+	MessagesSent *string        `json:"messagesSent,omitempty"`
 }
 
 type ResponseError struct {
 	Message string `json:"message"`
 }
 
-type Message struct {
-	Data MessageContent `json:"data"`
-}
-
-type MessageContent struct {
-	Time   int64             `json:"time"`
-	Values map[string]string `json:"values"`
-}
-
-func Get(config Config, arguments map[string]string) []ServerResponse {
+func Get(config Config, arguments map[string]string) ([]ServerResponse, error) {
 	uriParams, _ := query.Values(config)
 	queryString := makeQueryString(arguments)
 
-	url := Leanplum_api_url + "?" + uriParams.Encode() + queryString.Encode()
+	url := Leanplum_api_url + "?" + uriParams.Encode() + "&" + queryString.Encode()
 
 	response, err := http.Get(url)
 
@@ -68,14 +60,14 @@ func Get(config Config, arguments map[string]string) []ServerResponse {
 	}
 
 	commonResponser := new(CommonResponse)
-	slice, _ := commonResponser.processResponse(response)
+	slice, err := commonResponser.processResponse(response)
 
-	return slice
+	return slice, err
 }
 
-func Post(config Config, body []byte, parameters map[string]string) []ServerResponse {
+func Post(config Config, queryParams map[string]string, body []byte) ([]ServerResponse, error) {
 	uriParams, _ := query.Values(config)
-	queryString := makeQueryString(parameters)
+	queryString := makeQueryString(queryParams)
 	url := Leanplum_api_url + "?" + uriParams.Encode() + "&" + queryString.Encode()
 
 	response, err := http.Post(url, "application/json", bytes.NewBuffer(body))
@@ -85,9 +77,8 @@ func Post(config Config, body []byte, parameters map[string]string) []ServerResp
 	}
 
 	commonResponser := new(CommonResponse)
-	slice, _ := commonResponser.processResponse(response)
 
-	return slice
+	return commonResponser.processResponse(response)
 }
 
 func (responser *CommonResponse) processResponse(response *http.Response) ([]ServerResponse, error) {
@@ -97,25 +88,26 @@ func (responser *CommonResponse) processResponse(response *http.Response) ([]Ser
 	err := json.NewDecoder(response.Body).Decode(&responser)
 
 	if err != nil {
-		log.Fatalf("Error: %v\n", err)
+		return nil, err
 	}
 
 	return responser.Response, nil
 }
 
-func (serverResponse *ServerResponse) CheckErrors() bool {
-
+func (serverResponse *ServerResponse) CheckErrors() (bool, error) {
 	if !serverResponse.Success {
 		if serverResponse.Error != nil {
-			log.Fatalf("The error message: %v\n", serverResponse.Error.Message)
+			log.Printf("The error message: %v\n", serverResponse.Error.Message)
+			return false, fmt.Errorf("The error message: %v\n", serverResponse.Error.Message)
 		}
 
 		if serverResponse.Warning != nil {
-			log.Fatalf("The warning message: %v\n", serverResponse.Warning.Message)
+			log.Printf("The warning message: %v\n", serverResponse.Warning.Message)
+			return false, fmt.Errorf("The warning message: %v\n", serverResponse.Warning.Message)
 		}
 	}
 
-	return serverResponse.Success
+	return serverResponse.Success, nil
 }
 
 // Read config from toml-file
