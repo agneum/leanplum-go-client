@@ -47,11 +47,9 @@ type ResponseError struct {
 	Message string `json:"message"`
 }
 
-func Get(config Config, arguments map[string]string) ([]ServerResponse, error) {
-	uriParams, _ := query.Values(config)
-	queryString := makeQueryString(arguments)
+func Get(config Config, encodedOptionalParams string) ([]ServerResponse, error) {
 
-	url := Leanplum_api_url + "?" + uriParams.Encode() + "&" + queryString.Encode()
+	url := Leanplum_api_url + "?" + MakeEncodedQueryStringFromStruct(config) + "&" + encodedOptionalParams
 
 	response, err := http.Get(url)
 
@@ -67,8 +65,8 @@ func Get(config Config, arguments map[string]string) ([]ServerResponse, error) {
 
 func Post(config Config, queryParams map[string]string, body []byte) ([]ServerResponse, error) {
 	uriParams, _ := query.Values(config)
-	queryString := makeQueryString(queryParams)
-	url := Leanplum_api_url + "?" + uriParams.Encode() + "&" + queryString.Encode()
+	queryString := MakeEncodedQueryStringFromMap(queryParams)
+	url := Leanplum_api_url + "?" + uriParams.Encode() + "&" + queryString
 
 	response, err := http.Post(url, "application/json", bytes.NewBuffer(body))
 
@@ -125,11 +123,16 @@ func ReadConfig(configFile string) Config {
 	return config
 }
 
-func makeQueryString(parameters map[string]string) url.Values {
+func MakeEncodedQueryStringFromMap(parameters map[string]string) string {
 	queryString := url.Values{}
 	for k, v := range parameters {
 		queryString.Add(k, v)
 	}
 
-	return queryString
+	return queryString.Encode()
+}
+
+func MakeEncodedQueryStringFromStruct(options interface{}) string {
+	uriParams, _ := query.Values(options)
+	return uriParams.Encode()
 }

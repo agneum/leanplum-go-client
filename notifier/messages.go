@@ -2,25 +2,38 @@ package notifier
 
 import (
 	"encoding/json"
-	"time"
 
 	"github.com/agneum/leanplum-go-client"
 )
 
-type Message struct {
-	Data MessageContent `json:"data"`
-}
+const sendMessageAction = "sendMessage"
 
 type MessageContent struct {
-	Time   int64             `json:"time"`
-	Values map[string]string `json:"values"`
+	Action            string `url:"action"`
+	UserId            string `url:"userId"`
+	MessageId         string `url:"messageId"`
+	CreateDisposition string `url:"createDisposition,omitempty"`
+	Force             bool   `url:"force,omitempty"`
+	Values            string `url:"values,omitempty"`
 }
 
-func SendMessage(config leanplum.Config, queryParams, values map[string]string) ([]leanplum.ServerResponse, error) {
-	body, _ := createBody(values)
-	return leanplum.Post(config, queryParams, body)
+func NewMessage(userId, messageId string) MessageContent {
+	var message MessageContent
+	message.Action = sendMessageAction
+	message.UserId = userId
+	message.MessageId = messageId
+
+	return message
 }
 
-func createBody(values map[string]string) ([]byte, error) {
-	return json.Marshal(Message{Data: MessageContent{Time: time.Now().Unix(), Values: values}})
+func (message *MessageContent) SetMessageValues(values map[string]string) error {
+	val, err := json.Marshal(values)
+
+	message.Values = string(val)
+
+	return err
+}
+
+func SendMessage(config leanplum.Config, queryParams MessageContent) ([]leanplum.ServerResponse, error) {
+	return leanplum.Get(config, leanplum.MakeEncodedQueryStringFromStruct(queryParams))
 }
